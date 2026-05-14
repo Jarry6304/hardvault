@@ -72,7 +72,9 @@ impl SecretsToml {
 /// 不引 regex crate 以縮小 binary 體積。
 fn is_valid_key_name(s: &str) -> bool {
     let mut chars = s.chars();
-    let Some(first) = chars.next() else { return false };
+    let Some(first) = chars.next() else {
+        return false;
+    };
     if !first.is_ascii_uppercase() {
         return false;
     }

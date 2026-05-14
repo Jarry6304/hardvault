@@ -33,7 +33,7 @@ pub fn load_key_from_b64(b64: &str) -> Result<Zeroizing<[u8; KEY_LEN]>> {
 pub fn generate_master_key_b64() -> String {
     let mut key = Zeroizing::new([0u8; KEY_LEN]);
     rand::rngs::OsRng.fill_bytes(&mut *key);
-    STANDARD.encode(&*key)
+    STANDARD.encode(*key)
 }
 
 /// 加密 plaintext → blob: `[nonce 12][ciphertext N][tag 16]`

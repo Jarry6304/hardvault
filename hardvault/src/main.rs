@@ -51,7 +51,8 @@ fn keygen() -> anyhow::Result<()> {
 }
 
 fn read_key_from_env(env_name: &str) -> Result<Zeroizing<[u8; KEY_LEN]>, HardvaultError> {
-    let b64 = std::env::var(env_name).map_err(|_| HardvaultError::KeyNotSet(env_name.to_string()))?;
+    let b64 =
+        std::env::var(env_name).map_err(|_| HardvaultError::KeyNotSet(env_name.to_string()))?;
     encrypt::load_key_from_b64(&b64)
 }
 
@@ -106,14 +107,11 @@ fn verify(input: &Path, out_cs: &Path, key_env: &str) -> anyhow::Result<()> {
     let toml = SecretsToml::parse(&content)?;
 
     if !out_cs.exists() {
-        anyhow::bail!(
-            "{} 不存在，請先執行 `hardvault build`",
-            out_cs.display()
-        );
+        anyhow::bail!("{} 不存在，請先執行 `hardvault build`", out_cs.display());
     }
 
-    let cs =
-        fs::read_to_string(out_cs).map_err(|e| HardvaultError::ReadFile(out_cs.to_path_buf(), e))?;
+    let cs = fs::read_to_string(out_cs)
+        .map_err(|e| HardvaultError::ReadFile(out_cs.to_path_buf(), e))?;
 
     let mut missing = Vec::new();
     for k in toml.secrets.keys().chain(toml.config.keys()) {

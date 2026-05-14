@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![.NET](https://img.shields.io/badge/.NET-8.0+-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
 [![Rust](https://img.shields.io/badge/Rust-1.70+-CE422B?logo=rust)](https://www.rust-lang.org/)
-[![Build](https://img.shields.io/badge/build-passing-brightgreen)]()
+[![CI](https://github.com/Jarry6304/hardvault/actions/workflows/ci.yml/badge.svg)](https://github.com/Jarry6304/hardvault/actions/workflows/ci.yml)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](#貢獻指南)
 
 ---

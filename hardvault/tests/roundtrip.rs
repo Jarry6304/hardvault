@@ -5,7 +5,9 @@
 //!
 //! Layout: `[nonce 12][ciphertext N][tag 16]`
 
-use hardvault::encrypt::{decrypt, encrypt, generate_master_key_b64, load_key_from_b64, KEY_LEN, NONCE_LEN, TAG_LEN};
+use hardvault::encrypt::{
+    decrypt, encrypt, generate_master_key_b64, load_key_from_b64, KEY_LEN, NONCE_LEN, TAG_LEN,
+};
 
 #[test]
 fn full_roundtrip_with_generated_key() {

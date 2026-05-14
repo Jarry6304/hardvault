@@ -22,7 +22,10 @@ pub enum Command {
         input: PathBuf,
 
         /// 產生的 C# 檔案路徑（會 mkdir -p 父目錄）
-        #[arg(long = "out-cs", default_value = "Infrastructure/Security/GeneratedSecrets.cs")]
+        #[arg(
+            long = "out-cs",
+            default_value = "Infrastructure/Security/GeneratedSecrets.cs"
+        )]
         out_cs: PathBuf,
 
         /// 產生的 appsettings.json 路徑
@@ -46,7 +49,10 @@ pub enum Command {
         #[arg(long, default_value = "secrets.toml")]
         input: PathBuf,
 
-        #[arg(long = "out-cs", default_value = "Infrastructure/Security/GeneratedSecrets.cs")]
+        #[arg(
+            long = "out-cs",
+            default_value = "Infrastructure/Security/GeneratedSecrets.cs"
+        )]
         out_cs: PathBuf,
 
         #[arg(long = "key-env", default_value = "HARDVAULT_MASTER_KEY")]
