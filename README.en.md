@@ -155,6 +155,20 @@ dotnet build
 
 ---
 
+## CLI Commands
+
+| Command | Purpose |
+|---|---|
+| `hardvault keygen` | Generate a 32-byte random key, print as base64 to stdout |
+| `hardvault build` | Read `secrets.toml`, emit `GeneratedSecrets.cs` + `appsettings.json` |
+| `hardvault verify` | Cross-check `secrets.toml` against `.cs` (key list only) |
+| `hardvault verify --decrypt` | Strong verification: decrypt each ciphertext, compare to plaintext, detect stale keys |
+| `hardvault rotate` | Re-encrypt all ciphertexts with a new key from `HARDVAULT_NEW_KEY` |
+
+All commands read the key **only** from environment variables — no `--master-key` flag (prevents leaks to shell history / process listings).
+
+---
+
 ## Full Walk-through
 
 ### Step 1: create `secrets.toml`
@@ -257,8 +271,8 @@ Production environment:
 
 Three reasons:
 1. **Native binary after compile** — harder to reverse-engineer than .NET IL
-2. **`strip` + LTO + `panic=abort`** — symbol table and panic strings essentially removed
-3. **Memory safety** — no buffer overflows or use-after-free in the encryption path
+2. **`strip` + LTO + `panic=abort`** release profile — strips symbol table, applies cross-crate dead code elimination
+3. **Memory safety** — Rust's ownership system eliminates buffer overflows / use-after-free at compile time, plus `zeroize` crate for RAII key wiping
 
 ### Q2: What if I lose `HARDVAULT_MASTER_KEY`?
 
@@ -310,18 +324,6 @@ Follow [Conventional Commits](https://www.conventionalcommits.org/):
 
 ---
 
-## Roadmap
-
-- [x] GitHub Actions CI (Rust + .NET cross-platform)
-- [x] GitHub Actions Release workflow (pre-built binaries)
-- [x] `hardvault rotate` (key rotation tool)
-- [ ] CI matrix all-green on Linux / macOS / Windows
-- [ ] Docker deployment example
-- [ ] HashiCorp Vault integration as `HARDVAULT_MASTER_KEY` source
-- [ ] NuGet package release
-
----
-
 ## License
 
 [MIT License](LICENSE). © 2026 Jarry6304.
@@ -330,8 +332,9 @@ Follow [Conventional Commits](https://www.conventionalcommits.org/):
 
 ## Acknowledgements
 
-- [AES-GCM in Rust](https://docs.rs/aes-gcm/) — encryption primitive
-- [litcrypt](https://docs.rs/litcrypt/) — compile-time string encryption (planned)
+- [aes-gcm](https://docs.rs/aes-gcm/) — AES-256-GCM primitive
+- [zeroize](https://docs.rs/zeroize/) — RAII key wiping
+- [clap](https://docs.rs/clap/) — CLI framework
 - Anthropic Claude — architecture discussion partner
 
 ---
