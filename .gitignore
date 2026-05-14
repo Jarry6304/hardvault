@@ -427,3 +427,27 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# ============================================
+# HARDVAULT
+# ============================================
+
+# 明文機敏值來源 — 絕對不能進 Git
+secrets.toml
+secrets.*.toml
+!secrets.toml.example
+
+# 由 hardvault build 自動產生的密文 + 明文 dictionary
+**/GeneratedSecrets.cs
+
+# Rust CLI build artifacts（若 hardvault 原始碼在本 repo）
+hardvault/target/
+rust_codegen/target/
+
+# launchSettings.json 內可能有 environmentVariables 區段含敏感值
+Properties/launchSettings.json
+
+# 本機開發用的金鑰 dump（hardvault keygen > key.local.txt 等習慣）
+*.key.local
+*.key.txt
+
