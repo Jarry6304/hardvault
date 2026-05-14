@@ -45,6 +45,8 @@ pub enum Command {
     Keygen,
 
     /// 檢查 secrets.toml 與已產生的 .cs 的 KEY 清單是否一致
+    ///
+    /// 加 --decrypt 會實際解密每筆密文並比對明文（強驗證）。
     Verify {
         #[arg(long, default_value = "secrets.toml")]
         input: PathBuf,
@@ -57,6 +59,10 @@ pub enum Command {
 
         #[arg(long = "key-env", default_value = "HARDVAULT_MASTER_KEY")]
         key_env: String,
+
+        /// 真實解密每筆密文比對明文，不只 KEY 清單比對
+        #[arg(long)]
+        decrypt: bool,
     },
 
     /// 用新金鑰重新加密 secrets.toml，產生新的 GeneratedSecrets.cs

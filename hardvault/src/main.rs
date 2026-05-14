@@ -6,6 +6,7 @@ use hardvault::cli::{Cli, Command};
 use hardvault::codegen;
 use hardvault::encrypt::{self, KEY_LEN};
 use hardvault::error::HardvaultError;
+use hardvault::parse_cs;
 use hardvault::schema::SecretsToml;
 use zeroize::Zeroizing;
 
@@ -24,7 +25,8 @@ fn main() -> anyhow::Result<()> {
             input,
             out_cs,
             key_env,
-        } => verify(&input, &out_cs, &key_env),
+            decrypt,
+        } => verify(&input, &out_cs, &key_env, decrypt),
         Command::Rotate {
             input,
             out_cs,
@@ -114,8 +116,8 @@ fn build(
     Ok(())
 }
 
-fn verify(input: &Path, out_cs: &Path, key_env: &str) -> anyhow::Result<()> {
-    let _key = read_key_from_env(key_env)?;
+fn verify(input: &Path, out_cs: &Path, key_env: &str, decrypt: bool) -> anyhow::Result<()> {
+    let key = read_key_from_env(key_env)?;
 
     let content =
         fs::read_to_string(input).map_err(|e| HardvaultError::ReadFile(input.to_path_buf(), e))?;
@@ -128,6 +130,28 @@ fn verify(input: &Path, out_cs: &Path, key_env: &str) -> anyhow::Result<()> {
     let cs = fs::read_to_string(out_cs)
         .map_err(|e| HardvaultError::ReadFile(out_cs.to_path_buf(), e))?;
 
+    if decrypt {
+        verify_decrypt(&toml, &cs, &key, out_cs)?;
+    } else {
+        verify_keys_only(&toml, &cs, out_cs)?;
+    }
+
+    eprintln!(
+        "✓ {} ↔ {} {} ({} secret + {} config)",
+        input.display(),
+        out_cs.display(),
+        if decrypt {
+            "完整解密驗證通過"
+        } else {
+            "KEY 清單一致"
+        },
+        toml.secrets.len(),
+        toml.config.len()
+    );
+    Ok(())
+}
+
+fn verify_keys_only(toml: &SecretsToml, cs: &str, out_cs: &Path) -> anyhow::Result<()> {
     let mut missing = Vec::new();
     for k in toml.secrets.keys().chain(toml.config.keys()) {
         let needle = format!(r#"["{k}"]"#);
@@ -135,7 +159,6 @@ fn verify(input: &Path, out_cs: &Path, key_env: &str) -> anyhow::Result<()> {
             missing.push(k.clone());
         }
     }
-
     if !missing.is_empty() {
         anyhow::bail!(
             "下列 KEY 在 {} 中找不到，請重新 `hardvault build`：{}",
@@ -143,14 +166,70 @@ fn verify(input: &Path, out_cs: &Path, key_env: &str) -> anyhow::Result<()> {
             missing.join(", ")
         );
     }
+    Ok(())
+}
 
-    eprintln!(
-        "✓ {} ↔ {} 的 KEY 清單一致 ({} secret + {} config)",
-        input.display(),
-        out_cs.display(),
-        toml.secrets.len(),
-        toml.config.len()
-    );
+fn verify_decrypt(
+    toml: &SecretsToml,
+    cs: &str,
+    key: &Zeroizing<[u8; KEY_LEN]>,
+    out_cs: &Path,
+) -> anyhow::Result<()> {
+    let parsed = parse_cs::parse_entries(cs)?;
+    let mut errors: Vec<String> = Vec::new();
+
+    // 每筆 [secrets] 必須在 .cs 內 encrypted=true 且解密後等於 toml 值
+    for (k, expected) in &toml.secrets {
+        let Some(entry) = parsed.get(k) else {
+            errors.push(format!("Secret '{k}' 在 .cs 中缺失"));
+            continue;
+        };
+        if !entry.encrypted {
+            errors.push(format!("Secret '{k}' 在 .cs 中被標記為非加密"));
+            continue;
+        }
+        match encrypt::decrypt(key, &entry.data) {
+            Ok(pt) if pt == expected.as_bytes() => {}
+            Ok(_) => errors.push(format!("Secret '{k}' 解密成功但內容與 secrets.toml 不符")),
+            Err(_) => errors.push(format!("Secret '{k}' 解密失敗（金鑰不匹配 .cs 內密文）")),
+        }
+    }
+
+    // 每筆 [config] 必須在 .cs 內 encrypted=false 且 bytes 等於 toml 值
+    for (k, expected) in &toml.config {
+        let Some(entry) = parsed.get(k) else {
+            errors.push(format!("Config '{k}' 在 .cs 中缺失"));
+            continue;
+        };
+        if entry.encrypted {
+            errors.push(format!("Config '{k}' 在 .cs 中被標記為加密"));
+            continue;
+        }
+        if entry.data != expected.as_bytes() {
+            errors.push(format!("Config '{k}' 內容與 secrets.toml 不符"));
+        }
+    }
+
+    // 反向：.cs 內若有 secrets.toml 沒有的 KEY → stale
+    use std::collections::BTreeSet;
+    let toml_keys: BTreeSet<&str> = toml
+        .secrets
+        .keys()
+        .chain(toml.config.keys())
+        .map(|s| s.as_str())
+        .collect();
+    for k in parsed.keys() {
+        if !toml_keys.contains(k.as_str()) {
+            errors.push(format!(
+                "KEY '{k}' 在 {} 但不在 secrets.toml（stale）",
+                out_cs.display()
+            ));
+        }
+    }
+
+    if !errors.is_empty() {
+        anyhow::bail!("verify --decrypt 失敗：\n  - {}", errors.join("\n  - "));
+    }
     Ok(())
 }
 
