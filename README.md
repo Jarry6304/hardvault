@@ -8,6 +8,8 @@
 [![CI](https://github.com/Jarry6304/hardvault/actions/workflows/ci.yml/badge.svg)](https://github.com/Jarry6304/hardvault/actions/workflows/ci.yml)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](#貢獻指南)
 
+🇺🇸 English: [README.en.md](README.en.md) · 📐 架構深入：[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · 🛡️ 威脅模型：[docs/THREAT-MODEL.md](docs/THREAT-MODEL.md)
+
 ---
 
 ## 目錄
