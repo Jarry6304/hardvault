@@ -292,6 +292,197 @@ fn run_keygen() -> String {
 }
 
 #[test]
+fn verify_decrypt_passes_after_fresh_build() {
+    let tmp = tempfile::tempdir().unwrap();
+    let input = tmp.path().join("secrets.toml");
+    let out_cs = tmp.path().join("Out.cs");
+    let out_json = tmp.path().join("appsettings.json");
+
+    std::fs::write(
+        &input,
+        "[secrets]\nTOKEN = \"ey_xxx\"\n[config]\nSIZE = \"50\"\n",
+    )
+    .unwrap();
+
+    let key = run_keygen();
+    Command::new(bin())
+        .args([
+            "build",
+            "--input",
+            input.to_str().unwrap(),
+            "--out-cs",
+            out_cs.to_str().unwrap(),
+            "--out-json",
+            out_json.to_str().unwrap(),
+        ])
+        .env("HARDVAULT_MASTER_KEY", &key)
+        .status()
+        .unwrap();
+
+    let verify = Command::new(bin())
+        .args([
+            "verify",
+            "--decrypt",
+            "--input",
+            input.to_str().unwrap(),
+            "--out-cs",
+            out_cs.to_str().unwrap(),
+        ])
+        .env("HARDVAULT_MASTER_KEY", &key)
+        .output()
+        .unwrap();
+
+    assert!(
+        verify.status.success(),
+        "verify --decrypt should pass: stderr={}",
+        String::from_utf8_lossy(&verify.stderr)
+    );
+    let stderr = String::from_utf8_lossy(&verify.stderr);
+    assert!(stderr.contains("完整解密驗證通過"));
+}
+
+#[test]
+fn verify_decrypt_fails_with_wrong_key() {
+    let tmp = tempfile::tempdir().unwrap();
+    let input = tmp.path().join("secrets.toml");
+    let out_cs = tmp.path().join("Out.cs");
+    let out_json = tmp.path().join("appsettings.json");
+    std::fs::write(&input, "[secrets]\nTOKEN = \"hello\"\n").unwrap();
+
+    let key_correct = run_keygen();
+    let key_wrong = run_keygen();
+
+    Command::new(bin())
+        .args([
+            "build",
+            "--input",
+            input.to_str().unwrap(),
+            "--out-cs",
+            out_cs.to_str().unwrap(),
+            "--out-json",
+            out_json.to_str().unwrap(),
+        ])
+        .env("HARDVAULT_MASTER_KEY", &key_correct)
+        .status()
+        .unwrap();
+
+    // 用錯誤的 key verify --decrypt 應該失敗
+    let verify = Command::new(bin())
+        .args([
+            "verify",
+            "--decrypt",
+            "--input",
+            input.to_str().unwrap(),
+            "--out-cs",
+            out_cs.to_str().unwrap(),
+        ])
+        .env("HARDVAULT_MASTER_KEY", &key_wrong)
+        .output()
+        .unwrap();
+
+    assert!(
+        !verify.status.success(),
+        "錯誤 key 應該 verify --decrypt 失敗"
+    );
+    let stderr = String::from_utf8_lossy(&verify.stderr);
+    assert!(
+        stderr.contains("解密失敗") || stderr.contains("不匹配"),
+        "錯誤訊息應指明解密問題：{stderr}"
+    );
+}
+
+#[test]
+fn verify_decrypt_catches_stale_cs() {
+    let tmp = tempfile::tempdir().unwrap();
+    let input = tmp.path().join("secrets.toml");
+    let out_cs = tmp.path().join("Out.cs");
+    let out_json = tmp.path().join("appsettings.json");
+    std::fs::write(&input, "[secrets]\nTOKEN = \"old_value\"\n").unwrap();
+
+    let key = run_keygen();
+    Command::new(bin())
+        .args([
+            "build",
+            "--input",
+            input.to_str().unwrap(),
+            "--out-cs",
+            out_cs.to_str().unwrap(),
+            "--out-json",
+            out_json.to_str().unwrap(),
+        ])
+        .env("HARDVAULT_MASTER_KEY", &key)
+        .status()
+        .unwrap();
+
+    // 修改 toml 但沒 rebuild — .cs 變成 stale
+    std::fs::write(&input, "[secrets]\nTOKEN = \"new_value\"\n").unwrap();
+
+    let verify = Command::new(bin())
+        .args([
+            "verify",
+            "--decrypt",
+            "--input",
+            input.to_str().unwrap(),
+            "--out-cs",
+            out_cs.to_str().unwrap(),
+        ])
+        .env("HARDVAULT_MASTER_KEY", &key)
+        .output()
+        .unwrap();
+
+    assert!(
+        !verify.status.success(),
+        "stale .cs 應該 verify --decrypt 失敗"
+    );
+    let stderr = String::from_utf8_lossy(&verify.stderr);
+    assert!(stderr.contains("不符"), "錯誤訊息應指明內容不符：{stderr}");
+}
+
+#[test]
+fn verify_decrypt_catches_extra_key_in_cs() {
+    let tmp = tempfile::tempdir().unwrap();
+    let input = tmp.path().join("secrets.toml");
+    let out_cs = tmp.path().join("Out.cs");
+    let out_json = tmp.path().join("appsettings.json");
+
+    std::fs::write(&input, "[secrets]\nA = \"1\"\nB = \"2\"\n").unwrap();
+    let key = run_keygen();
+    Command::new(bin())
+        .args([
+            "build",
+            "--input",
+            input.to_str().unwrap(),
+            "--out-cs",
+            out_cs.to_str().unwrap(),
+            "--out-json",
+            out_json.to_str().unwrap(),
+        ])
+        .env("HARDVAULT_MASTER_KEY", &key)
+        .status()
+        .unwrap();
+
+    // 從 toml 移除一個 KEY，.cs 中的 B 會變 stale
+    std::fs::write(&input, "[secrets]\nA = \"1\"\n").unwrap();
+
+    let verify = Command::new(bin())
+        .args([
+            "verify",
+            "--decrypt",
+            "--input",
+            input.to_str().unwrap(),
+            "--out-cs",
+            out_cs.to_str().unwrap(),
+        ])
+        .env("HARDVAULT_MASTER_KEY", &key)
+        .output()
+        .unwrap();
+
+    assert!(!verify.status.success());
+    let stderr = String::from_utf8_lossy(&verify.stderr);
+    assert!(stderr.contains("stale") || stderr.contains("'B'"));
+}
+
+#[test]
 fn rotate_changes_ciphertext_but_keeps_keys() {
     let tmp = tempfile::tempdir().unwrap();
     let input = tmp.path().join("secrets.toml");

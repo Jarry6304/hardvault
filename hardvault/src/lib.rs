@@ -6,4 +6,5 @@ pub mod cli;
 pub mod codegen;
 pub mod encrypt;
 pub mod error;
+pub mod parse_cs;
 pub mod schema;

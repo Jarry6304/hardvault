@@ -1,0 +1,247 @@
+//! 解析 codegen 產出的 GeneratedSecrets.cs，取出每筆 entry 的 KEY / encrypted / bytes
+//!
+//! 用於 `hardvault verify --decrypt`：實際拿密文解密、比對明文，而不只是 KEY 名稱比對。
+//!
+//! 解析格式（codegen.rs 產出）：
+//!
+//! ```text
+//! ["KEY"] = new(true,  new byte[] { 0xab, 0xcd }),
+//! ["KEY"] = new(false, new byte[] { 0x30, 0x31 }),
+//! ["EMPTY"] = new(false, System.Array.Empty<byte>()),
+//! ```
+
+use crate::error::{HardvaultError, Result};
+use std::collections::BTreeMap;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParsedEntry {
+    pub encrypted: bool,
+    pub data: Vec<u8>,
+}
+
+/// 從 .cs 文字內容中抽出所有 entry。
+/// 找不到任何 entry 不視為錯誤（呼叫端決定如何處理）。
+pub fn parse_entries(cs: &str) -> Result<BTreeMap<String, ParsedEntry>> {
+    let mut out = BTreeMap::new();
+    for (idx, line) in cs.lines().enumerate() {
+        let trimmed = line.trim();
+        if !trimmed.starts_with("[\"") {
+            continue;
+        }
+        let lineno = idx + 1;
+        let (key, entry) = parse_line(trimmed, lineno)?;
+        if out.insert(key.clone(), entry).is_some() {
+            return Err(HardvaultError::Schema(format!(
+                "第 {lineno} 行：KEY '{key}' 重複出現"
+            )));
+        }
+    }
+    Ok(out)
+}
+
+fn parse_line(line: &str, lineno: usize) -> Result<(String, ParsedEntry)> {
+    // ["KEY"] = new(BOOL, BYTES),
+    let err = |msg: &str| HardvaultError::Schema(format!("第 {lineno} 行 {msg}：{line}"));
+
+    // 1. KEY
+    let after_open = &line[2..]; // skip [\"
+    let key_end = after_open.find("\"]").ok_or_else(|| err("缺 \"]"))?;
+    let key = after_open[..key_end].to_string();
+
+    // 2. new(
+    let after_key = &after_open[key_end + 2..];
+    let new_pos = after_key.find("new(").ok_or_else(|| err("缺 new("))?;
+    let after_new = &after_key[new_pos + 4..];
+
+    // 3. bool
+    let (encrypted, after_bool) = if let Some(r) = after_new.strip_prefix("true") {
+        (true, r)
+    } else if let Some(r) = after_new.strip_prefix("false") {
+        (false, r)
+    } else {
+        return Err(err("bool 解析失敗"));
+    };
+
+    // 4. , (skip whitespace)
+    let after_comma = after_bool
+        .trim_start()
+        .strip_prefix(',')
+        .ok_or_else(|| err("缺逗號"))?
+        .trim_start();
+
+    // 5. bytes
+    let data = if let Some(rest) = after_comma.strip_prefix("new byte[]") {
+        let rest = rest
+            .trim_start()
+            .strip_prefix('{')
+            .ok_or_else(|| err("缺 {"))?;
+        let brace_end = rest.find('}').ok_or_else(|| err("缺 }"))?;
+        parse_byte_list(&rest[..brace_end], lineno)?
+    } else if after_comma.starts_with("System.Array.Empty<byte>()") {
+        Vec::new()
+    } else {
+        return Err(err("byte array 解析失敗"));
+    };
+
+    Ok((key, ParsedEntry { encrypted, data }))
+}
+
+fn parse_byte_list(s: &str, lineno: usize) -> Result<Vec<u8>> {
+    let mut bytes = Vec::new();
+    for tok in s.split(',') {
+        let t = tok.trim();
+        if t.is_empty() {
+            continue;
+        }
+        let hex = t
+            .strip_prefix("0x")
+            .ok_or_else(|| HardvaultError::Schema(format!("第 {lineno} 行：'{t}' 缺 0x 前綴")))?;
+        let b = u8::from_str_radix(hex, 16).map_err(|_| {
+            HardvaultError::Schema(format!("第 {lineno} 行：'{t}' 非合法 hex byte"))
+        })?;
+        bytes.push(b);
+    }
+    Ok(bytes)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_single_encrypted_entry() {
+        let cs = r#"
+internal static readonly IReadOnlyDictionary<string, Entry> Entries =
+    new Dictionary<string, Entry>
+    {
+        ["TOKEN"] = new(true, new byte[] { 0xab, 0xcd, 0xef }),
+    };
+"#;
+        let parsed = parse_entries(cs).unwrap();
+        assert_eq!(parsed.len(), 1);
+        let e = &parsed["TOKEN"];
+        assert!(e.encrypted);
+        assert_eq!(e.data, vec![0xab, 0xcd, 0xef]);
+    }
+
+    #[test]
+    fn parse_plaintext_entry() {
+        let cs = r#"        ["SIZE"] = new(false, new byte[] { 0x35, 0x30 }),"#;
+        let parsed = parse_entries(cs).unwrap();
+        let e = &parsed["SIZE"];
+        assert!(!e.encrypted);
+        assert_eq!(e.data, b"50");
+    }
+
+    #[test]
+    fn parse_empty_array() {
+        let cs = r#"        ["EMPTY"] = new(false, System.Array.Empty<byte>()),"#;
+        let parsed = parse_entries(cs).unwrap();
+        let e = &parsed["EMPTY"];
+        assert!(!e.encrypted);
+        assert!(e.data.is_empty());
+    }
+
+    #[test]
+    fn parse_multiple_entries_btreemap_sorted() {
+        let cs = r#"
+        ["ZEBRA"]  = new(true,  new byte[] { 0x01 }),
+        ["ALPHA"]  = new(false, new byte[] { 0x02 }),
+        ["MIKE"]   = new(true,  new byte[] { 0x03 }),
+"#;
+        let parsed = parse_entries(cs).unwrap();
+        let keys: Vec<_> = parsed.keys().collect();
+        assert_eq!(keys, vec!["ALPHA", "MIKE", "ZEBRA"]);
+    }
+
+    #[test]
+    fn parse_handles_full_codegen_output() {
+        // 模擬完整 codegen 輸出（含 header 與 namespace）
+        let cs = r#"
+// <auto-generated by hardvault 0.1.0>
+// 不要手動編輯。重新產生：hardvault build
+using System.Collections.Generic;
+
+namespace Hardvault.Security;
+
+internal static class GeneratedSecrets
+{
+    internal readonly record struct Entry(bool Encrypted, byte[] Data);
+
+    internal static readonly IReadOnlyDictionary<string, Entry> Entries =
+        new Dictionary<string, Entry>
+        {
+            ["DB_PASSWORD"] = new(true, new byte[] { 0x11, 0x40, 0xce }),
+            ["PAGE_SIZE"] = new(false, new byte[] { 0x35, 0x30 }),
+        };
+}
+"#;
+        let parsed = parse_entries(cs).unwrap();
+        assert_eq!(parsed.len(), 2);
+        assert!(parsed["DB_PASSWORD"].encrypted);
+        assert!(!parsed["PAGE_SIZE"].encrypted);
+        assert_eq!(parsed["PAGE_SIZE"].data, b"50");
+    }
+
+    #[test]
+    fn parse_no_entries_returns_empty_map() {
+        let cs = "// just a comment\nusing System;\n";
+        let parsed = parse_entries(cs).unwrap();
+        assert!(parsed.is_empty());
+    }
+
+    #[test]
+    fn parse_rejects_duplicate_key() {
+        let cs = r#"
+        ["DUP"] = new(true, new byte[] { 0x01 }),
+        ["DUP"] = new(false, new byte[] { 0x02 }),
+"#;
+        assert!(parse_entries(cs).is_err());
+    }
+
+    #[test]
+    fn parse_rejects_invalid_hex() {
+        let cs = r#"        ["BAD"] = new(false, new byte[] { 0xZZ }),"#;
+        assert!(parse_entries(cs).is_err());
+    }
+
+    #[test]
+    fn parse_rejects_missing_0x_prefix() {
+        let cs = r#"        ["BAD"] = new(false, new byte[] { ab, cd }),"#;
+        assert!(parse_entries(cs).is_err());
+    }
+
+    #[test]
+    fn parse_rejects_malformed_bool() {
+        let cs = r#"        ["BAD"] = new(yes, new byte[] { 0x01 }),"#;
+        assert!(parse_entries(cs).is_err());
+    }
+
+    #[test]
+    fn roundtrip_with_codegen() {
+        use crate::codegen::build_cs;
+        use crate::encrypt::KEY_LEN;
+        use crate::schema::SecretsToml;
+
+        let toml = SecretsToml::parse(
+            r#"
+[secrets]
+TOKEN = "hello"
+
+[config]
+SIZE = "50"
+"#,
+        )
+        .unwrap();
+        let key = [0u8; KEY_LEN];
+        let cs = build_cs(&toml, &key, "X").unwrap();
+
+        let parsed = parse_entries(&cs).unwrap();
+        assert_eq!(parsed.len(), 2);
+        assert!(parsed["TOKEN"].encrypted);
+        // TOKEN data should be nonce(12) + ciphertext(5) + tag(16) = 33 bytes
+        assert_eq!(parsed["TOKEN"].data.len(), 12 + 5 + 16);
+        assert!(!parsed["SIZE"].encrypted);
+        assert_eq!(parsed["SIZE"].data, b"50");
+    }
+}
