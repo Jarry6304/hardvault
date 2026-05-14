@@ -1,0 +1,42 @@
+[package]
+name = "hardvault"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.70"
+authors = ["Jarry6304"]
+license = "MIT"
+description = "Encrypt C# app secrets at build-time with AES-256-GCM, baked into the exe with an external HARDVAULT_MASTER_KEY env var."
+repository = "https://github.com/Jarry6304/hardvault"
+readme = "../README.md"
+keywords = ["secrets", "encryption", "aes-gcm", "csharp", "dotnet"]
+categories = ["command-line-utilities", "cryptography"]
+
+[lib]
+name = "hardvault"
+path = "src/lib.rs"
+
+[[bin]]
+name = "hardvault"
+path = "src/main.rs"
+
+[dependencies]
+aes-gcm    = "0.10"
+clap       = { version = "4", features = ["derive"] }
+serde      = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml       = "0.8"
+base64     = "0.22"
+rand       = "0.8"
+anyhow     = "1"
+thiserror  = "1"
+zeroize    = { version = "1", features = ["zeroize_derive"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+opt-level     = 3
+lto           = "fat"
+codegen-units = 1
+panic         = "abort"
+strip         = "symbols"

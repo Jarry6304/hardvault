@@ -1,0 +1,64 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Hardvault.Sample</RootNamespace>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+
+  <!--
+    引用 reference/GeneratedSecretsProvider.cs（單一真實來源），
+    透過 Link 在 IDE 中顯示為 Infrastructure/Security/ 下的檔案。
+  -->
+  <ItemGroup>
+    <Compile Include="../../reference/GeneratedSecretsProvider.cs"
+             Link="Infrastructure/Security/GeneratedSecretsProvider.cs" />
+  </ItemGroup>
+
+  <!--
+    GeneratedSecrets.cs 由 hardvault build 動態產生。
+    從預設 glob 中排除，改由 HardvaultBuild target 在生成後動態加入 @(Compile)。
+    這樣可避免「第一次 build 時檔案不存在 → 雙 build 才能成功」的尷尬。
+  -->
+  <ItemGroup>
+    <Compile Remove="Infrastructure/Security/GeneratedSecrets.cs" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <HardvaultExe Condition="'$(HardvaultExe)' == ''">hardvault</HardvaultExe>
+    <HardvaultInput>secrets.toml</HardvaultInput>
+    <HardvaultOutCs>Infrastructure/Security/GeneratedSecrets.cs</HardvaultOutCs>
+    <HardvaultOutJson>appsettings.json</HardvaultOutJson>
+  </PropertyGroup>
+
+  <!--
+    Pre-build：
+      1. 檢查 HARDVAULT_MASTER_KEY 與 secrets.toml
+      2. 執行 hardvault build（CLI 自己讀 ENV，絕不接受 master-key 旗標）
+      3. 確認檔案產生
+      4. 將 generated .cs 加入 @(Compile)，讓 CoreCompile 編進來
+  -->
+  <Target Name="HardvaultBuild" BeforeTargets="CoreCompile">
+    <Error
+      Condition="'$(HARDVAULT_MASTER_KEY)' == ''"
+      Text="HARDVAULT_MASTER_KEY 未設定。執行：hardvault keygen 後 export/setx 寫入環境變數" />
+
+    <Error
+      Condition="!Exists('$(HardvaultInput)')"
+      Text="找不到 $(HardvaultInput)。請 cp secrets.toml.example secrets.toml 並編輯後再 build。" />
+
+    <Exec Command="&quot;$(HardvaultExe)&quot; build --input &quot;$(HardvaultInput)&quot; --out-cs &quot;$(HardvaultOutCs)&quot; --out-json &quot;$(HardvaultOutJson)&quot;" />
+
+    <Error
+      Condition="!Exists('$(HardvaultOutCs)')"
+      Text="$(HardvaultOutCs) 未產生 — hardvault build 失敗，請手動執行該指令確認錯誤訊息。" />
+
+    <ItemGroup>
+      <Compile Include="$(HardvaultOutCs)" />
+    </ItemGroup>
+  </Target>
+
+</Project>

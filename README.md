@@ -5,8 +5,10 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![.NET](https://img.shields.io/badge/.NET-8.0+-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
 [![Rust](https://img.shields.io/badge/Rust-1.70+-CE422B?logo=rust)](https://www.rust-lang.org/)
-[![Build](https://img.shields.io/badge/build-passing-brightgreen)]()
+[![CI](https://github.com/Jarry6304/hardvault/actions/workflows/ci.yml/badge.svg)](https://github.com/Jarry6304/hardvault/actions/workflows/ci.yml)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](#貢獻指南)
+
+🇺🇸 English: [README.en.md](README.en.md) · 📐 架構深入：[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · 🛡️ 威脅模型：[docs/THREAT-MODEL.md](docs/THREAT-MODEL.md)
 
 ---
 
@@ -338,10 +340,11 @@ A：立即執行：
 
 ## 路線圖 Roadmap
 
-- [ ] 支援 Linux / macOS 平台測試
-- [ ] 增加 GitHub Actions CI/CD 範本
-- [ ] 提供 Docker 部署範例
-- [ ] 支援密文輪替工具（`hardvault rotate`）
+- [x] GitHub Actions CI（rust + .NET cross-platform）
+- [x] GitHub Actions Release（預編 binary）
+- [x] 密文輪替工具（`hardvault rotate`）
+- [ ] Linux / macOS / Windows 平台 CI 全綠驗證
+- [ ] Docker 部署範例
 - [ ] 整合 HashiCorp Vault 作為 `HARDVAULT_MASTER_KEY` 來源
 - [ ] NuGet Package 發布
 

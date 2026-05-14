@@ -1,0 +1,77 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact: hardvault
+            archive: hardvault-x86_64-linux.tar.gz
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact: hardvault
+            archive: hardvault-aarch64-darwin.tar.gz
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact: hardvault
+            archive: hardvault-x86_64-darwin.tar.gz
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact: hardvault.exe
+            archive: hardvault-x86_64-windows.zip
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: hardvault
+          key: release-${{ matrix.target }}
+
+      - name: Build release
+        working-directory: hardvault
+        run: cargo build --release --target ${{ matrix.target }} --locked
+
+      - name: Package (unix)
+        if: matrix.os != 'windows-latest'
+        working-directory: hardvault/target/${{ matrix.target }}/release
+        run: |
+          tar -czf "${{ matrix.archive }}" "${{ matrix.artifact }}"
+          shasum -a 256 "${{ matrix.archive }}" > "${{ matrix.archive }}.sha256"
+
+      - name: Package (windows)
+        if: matrix.os == 'windows-latest'
+        working-directory: hardvault/target/${{ matrix.target }}/release
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "${{ matrix.artifact }}" -DestinationPath "${{ matrix.archive }}"
+          $hash = (Get-FileHash "${{ matrix.archive }}" -Algorithm SHA256).Hash
+          "$hash  ${{ matrix.archive }}" | Out-File -FilePath "${{ matrix.archive }}.sha256" -Encoding ascii
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            hardvault/target/${{ matrix.target }}/release/${{ matrix.archive }}
+            hardvault/target/${{ matrix.target }}/release/${{ matrix.archive }}.sha256
+          draft: false
+          generate_release_notes: true
