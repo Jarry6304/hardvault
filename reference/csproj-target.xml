@@ -1,0 +1,49 @@
+<!--
+  HARDVAULT MSBuild 整合範本
+
+  將本檔案內的 <PropertyGroup> 與 <Target> 區段複製到你的 .csproj，
+  build 時會自動執行 hardvault build 重新產生：
+    - Infrastructure/Security/GeneratedSecrets.cs（密文 + 明文，請進 .gitignore）
+    - appsettings.json（只有 KEY，作為契約文件，可進 Git）
+
+  前置條件：
+    1. PATH 內可呼叫 hardvault（或設定 <HardvaultExe> 屬性指向絕對路徑）
+    2. 環境變數 HARDVAULT_MASTER_KEY 已設定（hardvault keygen 產生）
+    3. 專案根目錄存在 secrets.toml
+-->
+<Project>
+
+  <PropertyGroup>
+    <HardvaultExe Condition="'$(HardvaultExe)' == ''">hardvault</HardvaultExe>
+    <HardvaultInput Condition="'$(HardvaultInput)' == ''">secrets.toml</HardvaultInput>
+    <HardvaultOutCs Condition="'$(HardvaultOutCs)' == ''">Infrastructure/Security/GeneratedSecrets.cs</HardvaultOutCs>
+    <HardvaultOutJson Condition="'$(HardvaultOutJson)' == ''">appsettings.json</HardvaultOutJson>
+  </PropertyGroup>
+
+  <!--
+    1. 環境檢查：HARDVAULT_MASTER_KEY 與 secrets.toml 缺一不可
+    2. 執行 hardvault build：CLI 自己從環境變數讀取金鑰，
+       絕對不要把金鑰當 CLI 旗標傳入（會洩漏到 shell history / process list）
+  -->
+  <Target Name="HardvaultBuild" BeforeTargets="BeforeBuild">
+    <Error
+      Condition="'$(HARDVAULT_MASTER_KEY)' == ''"
+      Text="環境變數 HARDVAULT_MASTER_KEY 未設定。請執行 hardvault keygen 產生後，再以 setx (Windows) 或 export (Linux/macOS) 寫入。" />
+
+    <Error
+      Condition="!Exists('$(HardvaultInput)')"
+      Text="找不到 $(HardvaultInput)。請參考 README 範例建立。" />
+
+    <Exec Command="&quot;$(HardvaultExe)&quot; build --input &quot;$(HardvaultInput)&quot; --out-cs &quot;$(HardvaultOutCs)&quot; --out-json &quot;$(HardvaultOutJson)&quot;" />
+  </Target>
+
+  <!--
+    產出後再驗證一次，避免 Exec 看似成功但檔案沒寫出來的情境
+  -->
+  <Target Name="HardvaultValidate" AfterTargets="HardvaultBuild" BeforeTargets="BeforeBuild">
+    <Error
+      Condition="!Exists('$(HardvaultOutCs)')"
+      Text="$(HardvaultOutCs) 不存在。hardvault build 可能失敗，請手動執行該指令確認錯誤訊息。" />
+  </Target>
+
+</Project>
