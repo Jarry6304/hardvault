@@ -290,3 +290,158 @@ fn run_keygen() -> String {
     let out = Command::new(bin()).arg("keygen").output().unwrap();
     String::from_utf8(out.stdout).unwrap().trim().to_string()
 }
+
+#[test]
+fn rotate_changes_ciphertext_but_keeps_keys() {
+    let tmp = tempfile::tempdir().unwrap();
+    let input = tmp.path().join("secrets.toml");
+    let out_cs = tmp.path().join("Out.cs");
+    let out_json = tmp.path().join("appsettings.json");
+
+    std::fs::write(
+        &input,
+        "[secrets]\nTOKEN = \"hello\"\n[config]\nSIZE = \"10\"\n",
+    )
+    .unwrap();
+
+    let key_old = run_keygen();
+    let key_new = run_keygen();
+
+    // 1. 用舊 key build
+    Command::new(bin())
+        .args([
+            "build",
+            "--input",
+            input.to_str().unwrap(),
+            "--out-cs",
+            out_cs.to_str().unwrap(),
+            "--out-json",
+            out_json.to_str().unwrap(),
+        ])
+        .env("HARDVAULT_MASTER_KEY", &key_old)
+        .status()
+        .unwrap();
+    let cs_before = std::fs::read_to_string(&out_cs).unwrap();
+    assert!(cs_before.contains(r#"["TOKEN"]"#));
+
+    // 2. Rotate 到新 key
+    let status = Command::new(bin())
+        .args([
+            "rotate",
+            "--input",
+            input.to_str().unwrap(),
+            "--out-cs",
+            out_cs.to_str().unwrap(),
+            "--out-json",
+            out_json.to_str().unwrap(),
+        ])
+        .env("HARDVAULT_MASTER_KEY", &key_old)
+        .env("HARDVAULT_NEW_KEY", &key_new)
+        .output()
+        .unwrap();
+    assert!(status.status.success(), "rotate failed: {:?}", status);
+
+    // 3. .cs 內容變了（密文用新 key 加密）
+    let cs_after = std::fs::read_to_string(&out_cs).unwrap();
+    assert_ne!(cs_before, cs_after, "rotate 應改變 ciphertext");
+
+    // 4. KEY 名稱仍然存在
+    assert!(cs_after.contains(r#"["TOKEN"]"#));
+    assert!(cs_after.contains(r#"["SIZE"]"#));
+
+    // 5. 明文 config 不變（SIZE="10" 仍是 0x31 0x30）
+    assert!(cs_after.contains("0x31, 0x30"));
+
+    // 6. stderr 應提到 rotate 完成提示
+    let stderr = String::from_utf8_lossy(&status.stderr);
+    assert!(stderr.contains("Rotate"));
+    assert!(stderr.contains("部署"));
+}
+
+#[test]
+fn rotate_rejects_identical_keys() {
+    let tmp = tempfile::tempdir().unwrap();
+    let input = tmp.path().join("secrets.toml");
+    let out_cs = tmp.path().join("Out.cs");
+    let out_json = tmp.path().join("appsettings.json");
+    std::fs::write(&input, "[secrets]\nT = \"x\"\n").unwrap();
+
+    let key = run_keygen();
+    let output = Command::new(bin())
+        .args([
+            "rotate",
+            "--input",
+            input.to_str().unwrap(),
+            "--out-cs",
+            out_cs.to_str().unwrap(),
+            "--out-json",
+            out_json.to_str().unwrap(),
+        ])
+        .env("HARDVAULT_MASTER_KEY", &key)
+        .env("HARDVAULT_NEW_KEY", &key)
+        .output()
+        .unwrap();
+
+    assert!(!output.status.success(), "相同金鑰應拒絕");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("相同"), "錯誤訊息應提到金鑰相同：{stderr}");
+}
+
+#[test]
+fn rotate_rejects_same_env_var_name() {
+    let tmp = tempfile::tempdir().unwrap();
+    let input = tmp.path().join("secrets.toml");
+    let out_cs = tmp.path().join("Out.cs");
+    let out_json = tmp.path().join("appsettings.json");
+    std::fs::write(&input, "[secrets]\nT = \"x\"\n").unwrap();
+
+    let key = run_keygen();
+    let output = Command::new(bin())
+        .args([
+            "rotate",
+            "--input",
+            input.to_str().unwrap(),
+            "--out-cs",
+            out_cs.to_str().unwrap(),
+            "--out-json",
+            out_json.to_str().unwrap(),
+            "--new-key-env",
+            "HARDVAULT_MASTER_KEY", // same as default --key-env
+        ])
+        .env("HARDVAULT_MASTER_KEY", &key)
+        .output()
+        .unwrap();
+
+    assert!(!output.status.success(), "同一個 env var 應拒絕");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("環境變數"));
+}
+
+#[test]
+fn rotate_fails_without_new_key_env() {
+    let tmp = tempfile::tempdir().unwrap();
+    let input = tmp.path().join("secrets.toml");
+    let out_cs = tmp.path().join("Out.cs");
+    let out_json = tmp.path().join("appsettings.json");
+    std::fs::write(&input, "[secrets]\nT = \"x\"\n").unwrap();
+
+    let key = run_keygen();
+    let output = Command::new(bin())
+        .args([
+            "rotate",
+            "--input",
+            input.to_str().unwrap(),
+            "--out-cs",
+            out_cs.to_str().unwrap(),
+            "--out-json",
+            out_json.to_str().unwrap(),
+        ])
+        .env("HARDVAULT_MASTER_KEY", &key)
+        .env_remove("HARDVAULT_NEW_KEY")
+        .output()
+        .unwrap();
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("HARDVAULT_NEW_KEY"));
+}

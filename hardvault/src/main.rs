@@ -25,6 +25,21 @@ fn main() -> anyhow::Result<()> {
             out_cs,
             key_env,
         } => verify(&input, &out_cs, &key_env),
+        Command::Rotate {
+            input,
+            out_cs,
+            out_json,
+            namespace,
+            key_env,
+            new_key_env,
+        } => rotate(
+            &input,
+            &out_cs,
+            &out_json,
+            &namespace,
+            &key_env,
+            &new_key_env,
+        ),
     }
 }
 
@@ -136,5 +151,37 @@ fn verify(input: &Path, out_cs: &Path, key_env: &str) -> anyhow::Result<()> {
         toml.secrets.len(),
         toml.config.len()
     );
+    Ok(())
+}
+
+fn rotate(
+    input: &Path,
+    out_cs: &Path,
+    out_json: &Path,
+    namespace: &str,
+    key_env: &str,
+    new_key_env: &str,
+) -> anyhow::Result<()> {
+    if key_env == new_key_env {
+        anyhow::bail!("--key-env 與 --new-key-env 不能指向同一個環境變數（{key_env}）");
+    }
+
+    let old_key = read_key_from_env(key_env)?;
+    let new_key = read_key_from_env(new_key_env)?;
+    if old_key.as_slice() == new_key.as_slice() {
+        anyhow::bail!("新舊金鑰內容相同（{key_env} 與 {new_key_env}），rotate 沒有意義");
+    }
+    // 顯式 drop 舊 key — 不需要它，避免額外停留
+    drop(old_key);
+    drop(new_key);
+
+    // 委派給 build，用新 env 重新加密
+    build(input, out_cs, out_json, namespace, new_key_env)?;
+
+    eprintln!();
+    eprintln!("🔄 Rotate 完成。下一步：");
+    eprintln!("  1. 更新所有部署環境的 HARDVAULT_MASTER_KEY 為新值");
+    eprintln!("  2. 重新編譯與部署 C# 專案");
+    eprintln!("  3. 舊金鑰視為已洩漏，銷毀並更換");
     Ok(())
 }

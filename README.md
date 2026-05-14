@@ -340,10 +340,11 @@ A：立即執行：
 
 ## 路線圖 Roadmap
 
-- [ ] 支援 Linux / macOS 平台測試
-- [ ] 增加 GitHub Actions CI/CD 範本
-- [ ] 提供 Docker 部署範例
-- [ ] 支援密文輪替工具（`hardvault rotate`）
+- [x] GitHub Actions CI（rust + .NET cross-platform）
+- [x] GitHub Actions Release（預編 binary）
+- [x] 密文輪替工具（`hardvault rotate`）
+- [ ] Linux / macOS / Windows 平台 CI 全綠驗證
+- [ ] Docker 部署範例
 - [ ] 整合 HashiCorp Vault 作為 `HARDVAULT_MASTER_KEY` 來源
 - [ ] NuGet Package 發布
 

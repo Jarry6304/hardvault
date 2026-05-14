@@ -312,10 +312,11 @@ Follow [Conventional Commits](https://www.conventionalcommits.org/):
 
 ## Roadmap
 
-- [ ] CI matrix coverage for Linux / macOS / Windows
-- [ ] GitHub Actions release workflow with pre-built binaries
+- [x] GitHub Actions CI (Rust + .NET cross-platform)
+- [x] GitHub Actions Release workflow (pre-built binaries)
+- [x] `hardvault rotate` (key rotation tool)
+- [ ] CI matrix all-green on Linux / macOS / Windows
 - [ ] Docker deployment example
-- [ ] `hardvault rotate` (key rotation tool)
 - [ ] HashiCorp Vault integration as `HARDVAULT_MASTER_KEY` source
 - [ ] NuGet package release
 

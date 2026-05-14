@@ -58,4 +58,35 @@ pub enum Command {
         #[arg(long = "key-env", default_value = "HARDVAULT_MASTER_KEY")]
         key_env: String,
     },
+
+    /// 用新金鑰重新加密 secrets.toml，產生新的 GeneratedSecrets.cs
+    ///
+    /// 設定流程：
+    ///   export HARDVAULT_MASTER_KEY=<舊金鑰>
+    ///   export HARDVAULT_NEW_KEY=$(hardvault keygen | head -1)
+    ///   hardvault rotate
+    Rotate {
+        #[arg(long, default_value = "secrets.toml")]
+        input: PathBuf,
+
+        #[arg(
+            long = "out-cs",
+            default_value = "Infrastructure/Security/GeneratedSecrets.cs"
+        )]
+        out_cs: PathBuf,
+
+        #[arg(long = "out-json", default_value = "appsettings.json")]
+        out_json: PathBuf,
+
+        #[arg(long, default_value = "Hardvault.Security")]
+        namespace: String,
+
+        /// 舊金鑰所在的環境變數（rotate 完應銷毀此值）
+        #[arg(long = "key-env", default_value = "HARDVAULT_MASTER_KEY")]
+        key_env: String,
+
+        /// 新金鑰所在的環境變數
+        #[arg(long = "new-key-env", default_value = "HARDVAULT_NEW_KEY")]
+        new_key_env: String,
+    },
 }
