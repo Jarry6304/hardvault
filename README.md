@@ -20,6 +20,7 @@
 - [適用 / 不適用](#適用--不適用)
 - [安全等級比較](#安全等級比較)
 - [快速開始](#快速開始)
+- [CLI 命令](#cli-命令)
 - [完整使用教學](#完整使用教學)
 - [安全邊界](#安全邊界)
 - [常見問題 FAQ](#常見問題-faq)
@@ -169,6 +170,20 @@ dotnet build
 
 ---
 
+## CLI 命令
+
+| 命令 | 用途 |
+|---|---|
+| `hardvault keygen` | 產生 32 bytes 隨機金鑰並 base64 印至 stdout |
+| `hardvault build` | 讀 `secrets.toml` 產生 `GeneratedSecrets.cs` + `appsettings.json` |
+| `hardvault verify` | 比對 `secrets.toml` 與 `.cs` 的 KEY 清單 |
+| `hardvault verify --decrypt` | 強驗證：實際解密每筆密文比對明文，偵測 stale KEY |
+| `hardvault rotate` | 用 `HARDVAULT_NEW_KEY` 重新加密所有密文 |
+
+所有命令均**只**從環境變數讀金鑰，不接受 `--master-key` 旗標（避免寫進 shell history 與 process list）。
+
+---
+
 ## 完整使用教學
 
 ### Step 1：建立 secrets.toml
@@ -232,6 +247,15 @@ public class LineNotifyService
 }
 ```
 
+對極敏感資料（DB 密碼、私鑰、PII）使用 `GetSecret(...)`，取得 `SecretValue: IDisposable`，
+離開 `using` 時自動 `ZeroMemory`，避免 string 落入 GC 不可控的生命週期：
+
+```csharp
+using var pwd = _secrets.GetSecret("DB_PASSWORD");
+ConnectDatabase(pwd.AsSpan());
+// 離開 using → SecretValue.Dispose() → CryptographicOperations.ZeroMemory
+```
+
 ### Step 6：部署
 
 ```
@@ -271,8 +295,8 @@ public class LineNotifyService
 
 A：三個原因：
 1. **編譯後是 native binary**，逆向難度高於 .NET IL
-2. **litcrypt + strip + LTO** 可徹底移除符號表與字串
-3. **記憶體安全**，避免 buffer overflow 等漏洞
+2. **strip + LTO + panic=abort** release profile：移除符號表、跨 crate dead code elimination
+3. **記憶體安全**：Rust ownership system 編譯期消除 buffer overflow / use-after-free，加上 `zeroize` crate RAII 自動清除金鑰
 
 ### Q2：HARDVAULT_MASTER_KEY 弄丟了怎麼辦？
 
@@ -338,18 +362,6 @@ A：立即執行：
 
 ---
 
-## 路線圖 Roadmap
-
-- [x] GitHub Actions CI（rust + .NET cross-platform）
-- [x] GitHub Actions Release（預編 binary）
-- [x] 密文輪替工具（`hardvault rotate`）
-- [ ] Linux / macOS / Windows 平台 CI 全綠驗證
-- [ ] Docker 部署範例
-- [ ] 整合 HashiCorp Vault 作為 `HARDVAULT_MASTER_KEY` 來源
-- [ ] NuGet Package 發布
-
----
-
 ## 授權
 
 本專案採用 [MIT License](LICENSE) 授權。
@@ -382,8 +394,9 @@ SOFTWARE.
 
 ## 致謝
 
-- [AES-GCM in Rust](https://docs.rs/aes-gcm/) - 加密實作
-- [litcrypt](https://docs.rs/litcrypt/) - 字串編譯期加密
+- [aes-gcm](https://docs.rs/aes-gcm/) - AES-256-GCM 實作
+- [zeroize](https://docs.rs/zeroize/) - 金鑰 RAII 自動清除
+- [clap](https://docs.rs/clap/) - CLI 框架
 - Anthropic Claude - 架構設計討論夥伴
 
 ---
