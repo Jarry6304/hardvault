@@ -37,7 +37,7 @@
   <!--
     Pre-build：
       1. 檢查 HARDVAULT_MASTER_KEY 與 secrets.toml
-      2. 執行 hardvault build（CLI 自己讀 ENV，絕不傳 --master-key）
+      2. 執行 hardvault build（CLI 自己讀 ENV，絕不接受 master-key 旗標）
       3. 確認檔案產生
       4. 將 generated .cs 加入 @(Compile)，讓 CoreCompile 編進來
   -->
