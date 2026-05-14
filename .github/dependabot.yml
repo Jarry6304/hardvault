@@ -18,6 +18,11 @@ updates:
       cargo-patch:
         update-types:
           - patch
+    # 不要自動開 major 升級 PR（通常有 breaking change，需要手動評估）
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
 
   # GitHub Actions workflow 依賴
   - package-ecosystem: github-actions
@@ -33,3 +38,8 @@ updates:
       - github-actions
     commit-message:
       prefix: "chore(ci)"
+    # 同上：actions 的 major 升級也手動處理
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
