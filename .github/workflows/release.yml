@@ -36,7 +36,7 @@ jobs:
             archive: hardvault-x86_64-windows.zip
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: dtolnay/rust-toolchain@stable
         with:
