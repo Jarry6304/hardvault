@@ -9,7 +9,14 @@
 
 ## [Unreleased]
 
-_目前無未發布變更。_
+### Changed
+
+- **deps**: 移除 `rand = "0.8"` 直接依賴（dependabot 因 ignore-major 規則無法自動升至 0.10）。
+  `generate_master_key_b64` 改用 `aes_gcm::aead::rand_core::{OsRng, RngCore}`，
+  與 `Aes256Gcm::generate_nonce` 共用同一個 RNG 來源，dep 樹順帶移除
+  `rand_chacha`、`ppv-lite86`、`zerocopy`、`zerocopy-derive`，binary 更小、零行為差異。
+- **docs**: `reference/generate_master_key.rs` 與 `reference/hardvault_cli_notes.md`
+  的依賴範例同步調整為當前實際使用版本（`toml = "1.1"`、`thiserror = "2"`、不再列 `rand`）。
 
 ---
 

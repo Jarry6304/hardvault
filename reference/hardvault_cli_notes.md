@@ -122,15 +122,15 @@ internal static class GeneratedSecrets
 
 ```toml
 [dependencies]
-aes-gcm   = "0.10"
-clap      = { version = "4", features = ["derive"] }
-serde     = { version = "1", features = ["derive"] }
-toml      = "0.8"
-base64    = "0.22"
-rand      = "0.8"
-anyhow    = "1"
-thiserror = "1"
-zeroize   = { version = "1", features = ["zeroize_derive"] }
+aes-gcm    = "0.10"   # aead::OsRng + rand_core 已內含，不另引 rand
+clap       = { version = "4", features = ["derive"] }
+serde      = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml       = "1.1"
+base64     = "0.22"
+anyhow     = "1"
+thiserror  = "2"
+zeroize    = { version = "1", features = ["zeroize_derive"] }
 ```
 
 ---

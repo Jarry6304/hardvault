@@ -7,21 +7,21 @@
 //!
 //! ```toml
 //! [dependencies]
-//! rand   = "0.8"
-//! base64 = "0.22"
+//! aes-gcm = "0.10"   # 已透過 aead 帶入 OsRng + rand_core，不需再加 rand
+//! base64  = "0.22"
 //! ```
 //!
 //! 獨立測試（不掛在 hardvault binary 上）：
 //!
 //! ```bash
 //! cargo new --bin keygen-test && cd keygen-test
-//! cargo add rand base64
+//! cargo add aes-gcm base64
 //! # 將本檔內容貼到 src/main.rs
 //! cargo run
 //! ```
 
+use aes_gcm::aead::{rand_core::RngCore, OsRng};
 use base64::{engine::general_purpose::STANDARD, Engine};
-use rand::RngCore;
 
 /// AES-256 → 32 bytes
 const KEY_LEN: usize = 32;
@@ -29,7 +29,7 @@ const KEY_LEN: usize = 32;
 fn main() {
     let mut key = [0u8; KEY_LEN];
     // OsRng 內部呼叫 OS RNG（Linux: getrandom(2)、Windows: BCryptGenRandom）
-    rand::rngs::OsRng.fill_bytes(&mut key);
+    OsRng.fill_bytes(&mut key);
 
     let b64 = STANDARD.encode(key);
 

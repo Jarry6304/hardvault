@@ -1,10 +1,9 @@
 use crate::error::{HardvaultError, Result};
 use aes_gcm::{
-    aead::{Aead, AeadCore, KeyInit, OsRng},
+    aead::{rand_core::RngCore, Aead, AeadCore, KeyInit, OsRng},
     Aes256Gcm, Key, Nonce,
 };
 use base64::{engine::general_purpose::STANDARD, Engine};
-use rand::RngCore;
 use zeroize::Zeroizing;
 
 /// AES-256 金鑰長度
@@ -32,7 +31,7 @@ pub fn load_key_from_b64(b64: &str) -> Result<Zeroizing<[u8; KEY_LEN]>> {
 /// 產生 32 bytes 隨機金鑰並 base64 編碼
 pub fn generate_master_key_b64() -> String {
     let mut key = Zeroizing::new([0u8; KEY_LEN]);
-    rand::rngs::OsRng.fill_bytes(&mut *key);
+    OsRng.fill_bytes(&mut *key);
     STANDARD.encode(*key)
 }
 
